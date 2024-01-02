@@ -10,7 +10,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/crypto/tmhash"
 	"github.com/tendermint/tendermint/libs/protoio"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
@@ -24,25 +23,26 @@ func examplePrecommit() *Vote {
 }
 
 func exampleVote(t byte) *Vote {
-	var stamp, err = time.Parse(TimeFormat, "2017-12-25T03:00:01.234Z")
+	var stamp, err = time.Parse(TimeFormat, "2023-12-28T07:43:19.041853139Z")
 	if err != nil {
 		panic(err)
 	}
 
 	return &Vote{
 		Type:      tmproto.SignedMsgType(t),
-		Height:    12345,
-		Round:     2,
+		Height:    12975357,
+		Round:     0,
 		Timestamp: stamp,
 		BlockID: BlockID{
-			Hash: tmhash.Sum([]byte("blockID_hash")),
+			Hash: []byte{122, 142, 192, 235, 60, 200, 129, 138, 195, 28, 210, 246, 239, 120, 205, 133, 142, 55, 139, 49, 122, 88, 39, 159, 168, 141, 149, 188, 97, 173, 187, 96},
 			PartSetHeader: PartSetHeader{
-				Total: 1000000,
-				Hash:  tmhash.Sum([]byte("blockID_part_set_header_hash")),
+				Total: 2,
+				Hash:  []byte{112, 168, 36, 7, 51, 201, 176, 92, 83, 27, 128, 6, 184, 203, 242, 148, 52, 222, 164, 187, 23, 226, 230, 212, 78, 193, 83, 74, 85, 83, 213, 154},
 			},
 		},
-		ValidatorAddress: crypto.AddressHash([]byte("validator_address")),
-		ValidatorIndex:   56789,
+		ValidatorAddress: crypto.AddressHash([]byte{203, 90, 99, 185, 30, 143, 78, 232, 219, 147, 89, 66, 203, 226, 87, 36, 99, 100, 121, 224}),
+		// ValidatorIndex:   0,
+		Signature: []byte{226, 162, 75, 243, 144, 204, 243, 68, 174, 40, 63, 58, 251, 123, 153, 105, 120, 238, 35, 63, 216, 100, 180, 171, 119, 149, 138, 252, 156, 7, 199, 108, 95, 59, 25, 183, 119, 161, 51, 46, 46, 147, 9, 31, 113, 191, 173, 81, 126, 238, 51, 91, 243, 227, 118, 46, 132, 191, 32, 218, 233, 51, 34, 6},
 	}
 }
 
@@ -53,7 +53,18 @@ func TestVoteSignable(t *testing.T) {
 	pb := CanonicalizeVote("test_chain_id", v)
 	expected, err := protoio.MarshalDelimited(&pb)
 	require.NoError(t, err)
+	require.Equal(t, expected, signBytes, "Got unexpected sign bytes for Vote.")
+}
 
+func TestGetMessage(t *testing.T) {
+	vote := examplePrecommit()
+	v := vote.ToProto()
+	signBytes := VoteSignBytes("osmosis-1", v)
+	pb := CanonicalizeVote("osmosis-1", v) // here also last eight bytes are ascii of osmosis-1
+	expected, err := protoio.MarshalDelimited(&pb)
+	t.Log("expected: ", expected)
+	t.Log("length: ", len(expected))
+	require.NoError(t, err)
 	require.Equal(t, expected, signBytes, "Got unexpected sign bytes for Vote.")
 }
 
@@ -144,6 +155,21 @@ func TestVoteProposalNotEq(t *testing.T) {
 	pb, err := proto.Marshal(&p)
 	require.NoError(t, err)
 	require.NotEqual(t, vb, pb)
+}
+
+func TestOsmosisVoteVerify(t *testing.T) {
+	pubkey := ed25519.PubKey([]byte{232, 220, 244, 245, 129, 135, 207, 5, 177, 141, 204, 198, 208, 136, 74, 224, 139, 244, 169, 141, 136, 113, 125, 15, 255, 146, 162, 182, 244, 87, 77, 71})
+	t.Log("public key: ", pubkey)
+	vote := examplePrecommit()
+	v := vote.ToProto()
+	signBytes := VoteSignBytes("osmosis-1", v)
+	t.Log("sign bytes", signBytes)
+	// they are comparing sign byetes with signature
+	t.Log(len(signBytes))
+	valid := pubkey.VerifySignature(signBytes, v.Signature)
+	t.Log("valid: ", valid)
+	require.True(t, valid)
+
 }
 
 func TestVoteVerifySignature(t *testing.T) {
